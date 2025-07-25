@@ -132,39 +132,54 @@ async function run() {
 
 
 
-    // ✅ Upload products with latest price at the beginning
+
+
+
     app.post('/products', async (req, res) => {
       try {
         const newProduct = req.body;
         const { itemName, date, pricePerUnit } = newProduct;
 
-        // ✅ parse current price entry
+        // ✅ Step 1: Parse current price entry from form
         const currentPrice = {
           date,
           price: Number(pricePerUnit),
         };
 
-        // ✅ check if same itemName already exists
-        const previousProducts = await productsCollection
-          .find({ itemName })
+        // ✅ Step 2: Find all approved products with the same itemName
+        const approvedProducts = await productsCollection
+          .find({ itemName, status: "approved" })
           .toArray();
 
-        // ✅ collect all previous prices
-        const allPrices = previousProducts.flatMap(product => product.prices || []);
+        let longestPricesArray = [];
 
-        // ✅ add new price at the beginning of array
-        allPrices.unshift(currentPrice);
+        // ✅ Step 3: Loop through to find the product with longest prices array
+        approvedProducts.forEach(product => {
+          if (product.prices && product.prices.length > longestPricesArray.length) {
+            longestPricesArray = product.prices;
+          }
+        });
 
-        // ✅ update prices array in the new product
-        newProduct.prices = allPrices;
+        // ✅ Step 4: Copy the longest prices and add current price at the beginning
+        const updatedPrices = [...longestPricesArray];
+        updatedPrices.unshift(currentPrice); // add new price to the front
 
+        // ✅ Step 5: Update the new product's prices field
+        newProduct.prices = updatedPrices;
+
+        // ✅ Step 6: Insert the new product
         const result = await productsCollection.insertOne(newProduct);
         res.send(result);
+
       } catch (error) {
         console.error('❌ Error inserting product:', error);
         res.status(500).send({ error: 'Internal Server Error' });
       }
     });
+
+
+
+
 
     app.get("/HomeProducts/all-approved", async (req, res) => {
       const limit = parseInt(req.query.limit) || 6;
@@ -177,13 +192,14 @@ async function run() {
     });
 
 
-    app.get("/products/potata",verifyFbToken, async (req, res) => {
+    app.get("/products/potata", verifyFbToken, async (req, res) => {
       try {
+        const itemName = req.query.itemName || "Potato"; // fallback দিলে ভালো হয়
         const pipeline = [
           {
             $match: {
               status: "approved",
-              itemName: "Potata"  // ✅ Potata এর ডেটা শুধু
+              itemName: itemName, // ✅ এখন dynamic
             },
           },
           {
@@ -205,7 +221,7 @@ async function run() {
               marketName: 1,
               date: 1,
               vendorName: 1,
-              pricesLength: 1
+              pricesLength: 1,
             },
           },
         ];
@@ -215,11 +231,11 @@ async function run() {
         if (top.length > 0) {
           res.send(top[0].prices.reverse()); // ✅ latest to oldest
         } else {
-          res.status(404).send({ message: "No Potata data found." });
+          res.status(404).send({ message: "No data found." });
         }
 
       } catch (error) {
-        console.error("Error fetching Potata data:", error);
+        console.error("Error fetching data:", error);
         res.status(500).send({ error: "Internal server error" });
       }
     });
@@ -365,13 +381,18 @@ async function run() {
         res.status(500).send({ error: "Internal server error" });
       }
     });
-    app.get("/products/Tomato-full", verifyFbToken, async (req, res) => {
+
+
+    //console.log
+
+    app.get("/products/tomato", verifyFbToken, async (req, res) => {
       try {
+        const itemName = req.query.itemName || "Tomato"; // fallback দিলে ভালো হয়
         const pipeline = [
           {
             $match: {
               status: "approved",
-              itemName: "Tomato", // ✅ Potata এর ডেটা ফিল্টার
+              itemName: itemName, // ✅ এখন dynamic
             },
           },
           {
@@ -385,26 +406,80 @@ async function run() {
               date: -1,
             },
           },
-          { $limit: 1 }, // ✅ সবথেকে বড় prices array যুক্ত document
+          { $limit: 1 },
+          {
+            $project: {
+              prices: 1,
+              itemName: 1,
+              marketName: 1,
+              date: 1,
+              vendorName: 1,
+              pricesLength: 1,
+            },
+          },
+        ];
+
+        const top = await productsCollection.aggregate(pipeline).toArray();
+
+        if (top.length > 0) {
+          res.send(top[0].prices.reverse()); // ✅ latest to oldest
+        } else {
+          res.status(404).send({ message: "No data found." });
+        }
+
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        res.status(500).send({ error: "Internal server error" });
+      }
+    });
+
+
+
+
+    app.get("/products/tomato-full", verifyFbToken, async (req, res) => {
+      try {
+        const itemName = req.query.itemName || "Tomato"; // fallback if not provided
+
+        const pipeline = [
+          {
+            $match: {
+              status: "approved",
+              itemName: itemName, // ✅ dynamic itemName
+            },
+          },
+          {
+            $addFields: {
+              pricesLength: { $size: "$prices" },
+            },
+          },
+          {
+            $sort: {
+              pricesLength: -1,
+              date: -1,
+            },
+          },
+          { $limit: 1 }, // ✅ biggest price history
         ];
 
         const result = await productsCollection.aggregate(pipeline).toArray();
 
         if (result.length > 0) {
-          // ✅ Optional: prices কে latest-to-oldest করছিস এখানে
-          result[0].prices = result[0].prices.reverse();
-          res.send(result[0]); // ✅ পুরো document পাঠানো হচ্ছে
+          result[0].prices = result[0].prices.reverse(); // optional: latest → oldest
+          res.send(result[0]);
         } else {
-          res.status(404).send({ message: "No Potata data found." });
+          res.status(404).send({ message: `No data found for ${itemName}.` });
         }
 
       } catch (error) {
-        console.error("Error fetching full Potata data:", error);
+        console.error("❌ Error fetching item data:", error);
         res.status(500).send({ error: "Internal server error" });
       }
     });
+
+
+
     // orka all data
-    app.get("/products/orka-full", verifyFbToken,  async (req, res) => {
+    app.get("/products/orka-full", verifyFbToken, async (req, res) => {
       try {
         const pipeline = [
           {
@@ -528,21 +603,72 @@ async function run() {
     });
 
     // 
-    // Update Product API
+    // // Update Product API
+    // app.patch('/update-product/:id', async (req, res) => {
+    //   const id = req.params.id;
+    //   const updatedProduct = req.body;
+
+    //   try {
+    //     const result = await productsCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       { $set: updatedProduct }
+    //     );
+    //     res.send(result);
+    //   } catch (err) {
+    //     res.status(500).send({ message: "Failed to update product" });
+    //   }
+    // });
+
+    // // Update Product API
     app.patch('/update-product/:id', async (req, res) => {
       const id = req.params.id;
       const updatedProduct = req.body;
 
       try {
+        // ✅ Step 1: Get the current product
+        const existingProduct = await productsCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!existingProduct) {
+          return res.status(404).send({ message: "Product not found" });
+        }
+
+        const oldPrice = existingProduct.pricePerUnit;
+        const oldDate = existingProduct.date;
+        const newPrice = updatedProduct.pricePerUnit;
+        const newDate = updatedProduct.date;
+
+        let updatedPrices = existingProduct.prices || [];
+
+        // ✅ Step 2: If price or date has changed
+        if ((newPrice && newPrice !== oldPrice) || (newDate && newDate !== oldDate)) {
+          // ✅ Remove old date entry (if exists)
+          updatedPrices = updatedPrices.filter(entry => entry.date !== oldDate && entry.date !== newDate);
+
+          // ✅ Add new entry with new date & price
+          updatedPrices.unshift({
+            date: newDate,
+            price: Number(newPrice),
+          });
+        }
+
+        // ✅ Step 3: Assign updated prices
+        updatedProduct.prices = updatedPrices;
+
+        // ✅ Step 4: Update product
         const result = await productsCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: updatedProduct }
         );
+
         res.send(result);
       } catch (err) {
+        console.error("❌ Update Error:", err);
         res.status(500).send({ message: "Failed to update product" });
       }
     });
+
+
+
 
     // delete product
 
@@ -683,7 +809,7 @@ async function run() {
     app.patch("/products/reject/:id", async (req, res) => {
       const { id } = req.params;
       const { reason, feedback } = req.body;
-      console.log(feedback)
+      //console.log(feedback)
 
       const result = await productsCollection.updateOne(
         { _id: new ObjectId(id) },
@@ -775,7 +901,7 @@ async function run() {
     app.get("/products/all-approved", async (req, res) => {
       try {
         const { sort, from, to, page = 1, limit = 6 } = req.query;
-        console.log("From:", from, "To:", to);
+        //console.log("From:", from, "To:", to);
 
         const filter = { status: "approved" };
 
@@ -850,15 +976,15 @@ async function run() {
 
       try {
         const watchlistItems = await watchlistCollection.find({ email: email }).toArray();
-        console.log("Watchlist Items:", watchlistItems);
+        //console.log("Watchlist Items:", watchlistItems);
 
         if (!watchlistItems.length) return res.send([]);
 
         const productIds = watchlistItems.map(item => new ObjectId(item.productId));
-        console.log("Converted Product IDs:", productIds);
+        //console.log("Converted Product IDs:", productIds);
 
         const products = await productsCollection.find({ _id: { $in: productIds } }).toArray();
-        console.log("Fetched Products:", products);
+        //console.log("Fetched Products:", products);
 
         res.send(products);
       } catch (err) {
@@ -944,7 +1070,7 @@ async function run() {
     app.post('/create-payment-intent', async (req, res) => {
       try {
         const { amount } = req.body;
-        console.log(amount)
+        //console.log(amount)
 
         const paymentIntent = await stripe.paymentIntents.create({
           amount,
@@ -995,7 +1121,7 @@ async function run() {
     app.get('/payment-history', verifyFbToken, async (req, res) => {
       try {
         const email = req.query.email;
-        console.log("Backend Email Received: ", email);
+        //console.log("Backend Email Received: ", email);
 
         if (!email) {
           return res.status(400).send({ message: "Email query param is required" });
@@ -1057,7 +1183,7 @@ async function run() {
     app.get("/price-trend/:id", async (req, res) => {
       const productId = req.params.id;
       const compareDate = req.query.date; // format: 'YYYY-MM-DD'
-      console.log(productId, compareDate)
+      //console.log(productId, compareDate)
 
       if (!compareDate) {
         return res.status(400).send({ error: "Date query param is required" });
@@ -1080,7 +1206,7 @@ async function run() {
           itemName: itemName,
           date: compareDate, // This assumes date is stored as a string like '2025-07-22'
         });
-        console.log(matchedProduct)
+        //console.log(matchedProduct)
 
         if (!matchedProduct) {
           return res.status(404).send({ error: "No product found for given date and itemName" });
@@ -1118,7 +1244,7 @@ async function run() {
     app.get('/home-special-offer', async (req, res) => {
       try {
         const offers = await AdminOffersCollection.find()
-          .sort({ _id: -1 }) 
+          .sort({ _id: -1 })
           .limit(6)
           .toArray();
 
@@ -1144,7 +1270,7 @@ async function run() {
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    //console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -1158,5 +1284,5 @@ app.get('/', (req, res) => {
 })
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
+  //console.log(`Example app listening on port ${port}`)
 })
