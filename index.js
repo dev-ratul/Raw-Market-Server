@@ -22,7 +22,11 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
+<<<<<<< HEAD
+// git 
+=======
 
+>>>>>>> 8ab3beffc5575fe5f43eeb72cdea5d6391df4f1a
 
 
 
@@ -94,7 +98,7 @@ async function run() {
     }
 
 
-
+// 
     // upload users
     app.post('/users', async (req, res) => {
       const user = req.body;
