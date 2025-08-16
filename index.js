@@ -22,11 +22,7 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-<<<<<<< HEAD
-// git 
-=======
 
->>>>>>> 8ab3beffc5575fe5f43eeb72cdea5d6391df4f1a
 
 
 
@@ -98,7 +94,7 @@ async function run() {
     }
 
 
-// 
+    // 
     // upload users
     app.post('/users', async (req, res) => {
       const user = req.body;
@@ -185,6 +181,7 @@ async function run() {
 
 
 
+
     app.get("/HomeProducts/all-approved", async (req, res) => {
       const limit = parseInt(req.query.limit) || 6;
       const approvedProducts = await productsCollection
@@ -194,6 +191,26 @@ async function run() {
         .toArray();
       res.send(approvedProducts);
     });
+
+    // overall all approved product
+    app.get("/HomeProducts/all-approved-product", async (req, res) => {
+      console.log("Fetching all approved products...");
+      try {
+        if (!productsCollection) {
+          console.log("productsCollection not initialized!");
+        }
+        const allApprovedProducts = await productsCollection
+          .find({ status: "approved" })
+          .toArray();
+        console.log("Products fetched:", allApprovedProducts.length);
+        res.send(allApprovedProducts);
+      } catch (error) {
+        console.error("Error fetching approved products:", error);
+        res.status(500).send({ message: "Internal Server Error", error: error.message });
+      }
+    });
+
+
 
 
     app.get("/products/potata", verifyFbToken, async (req, res) => {
