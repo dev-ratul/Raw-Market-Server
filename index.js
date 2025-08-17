@@ -1281,7 +1281,7 @@ async function run() {
       }
     });
 
-    app.post('/support',async (req, res) => {
+    app.post('/support', async (req, res) => {
       const data = req.body;
       const result = await supportCollection.insertOne(data);
       res.send(result);
