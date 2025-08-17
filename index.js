@@ -56,6 +56,7 @@ async function run() {
     const reviewCollection = db.collection('review')
     const paymentCollection = db.collection('payments')
     const AdminOffersCollection = db.collection('adminOffer')
+    const supportCollection= db.collection('support')
 
 
 
@@ -1044,6 +1045,11 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/all-review", async (req, res) => {
+      const result = await reviewCollection.find().toArray()
+      res.send(result)
+    })
+
 
     // Get all reviews for a product
     app.get("/reviews/:productId", async (req, res) => {
@@ -1275,6 +1281,11 @@ async function run() {
       }
     });
 
+    app.post('/support',async (req, res) => {
+      const data = req.body;
+      const result = await supportCollection.insertOne(data);
+      res.send(result);
+    });
 
 
 
